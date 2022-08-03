@@ -21,6 +21,8 @@ defmodule Lab.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:erlport, github: "heyoka/erlport", branch: "master"},
+
       {:evision, "~> 0.1.0-dev", github: "cocoa-xu/evision", branch: "main"},
       {:axon, "~> 0.1.0-dev", github: "elixir-nx/axon", branch: "main"},
       {:exla, "~> 0.1.0-dev", github: "elixir-nx/nx", sparse: "exla", override: true},

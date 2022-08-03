@@ -179,6 +179,7 @@ defmodule SolitairePPO do
 
             IO.inspect {Nx.to_number(prob_act), Nx.to_number(advantage[0])}
             if s.prob_act do
+                w=nil
                 {wa, actor_loss} = actor_fit(s.wa.w, s.wa.os, w.wa.ouf, prob_act, s.prob_act, advantage, s.eps, 0)
                 {wc, critic_loss} = critic_fit(s.wc.w, s.wc.os, w.wc.ouf, advantage, 0)
                 %{s | game: next_game, prob_act: prob_act}

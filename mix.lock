@@ -3,6 +3,7 @@
   "complex": {:git, "https://github.com/elixir-nx/complex.git", "45b088beb55b43ffa0c5aa1e1382d980b222924f", [branch: "main"]},
   "dll_loader_helper": {:hex, :dll_loader_helper, "0.1.0", "904c3cec32e6e0fc5914e41989ce9350d2bfd06b32f952a658fe63342b993e83", [:make, :mix], [{:elixir_make, "~> 0.6", [hex: :elixir_make, repo: "hexpm", optional: false]}], "hexpm", "b9db9151af610a2db375af543e912b3dd9cad87377d829328888386c65681473"},
   "elixir_make": {:hex, :elixir_make, "0.6.3", "bc07d53221216838d79e03a8019d0839786703129599e9619f4ab74c8c096eac", [:mix], [], "hexpm", "f5cbd651c5678bcaabdbb7857658ee106b12509cd976c2c2fca99688e1daf716"},
+  "erlport": {:git, "https://github.com/heyoka/erlport.git", "bb3acc8d22edf275e4f32d463ee2f46ed7e9769e", [branch: "master"]},
   "evision": {:git, "https://github.com/cocoa-xu/evision.git", "f29fb93c0fdc92edd0e5cc58a4dc06a8070a6d40", [branch: "main"]},
   "exla": {:git, "https://github.com/elixir-nx/nx.git", "44d77ca48c5d05f383c016d84333f40b10c0b775", [sparse: "exla"]},
   "nx": {:git, "https://github.com/elixir-nx/nx.git", "44d77ca48c5d05f383c016d84333f40b10c0b775", [sparse: "nx"]},

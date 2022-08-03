@@ -56,12 +56,14 @@ defmodule SolitaireEasy do
         |> Nx.divide(255)
     end
 
-    def actions(s) do
+    def actions(s, total_actions \\ 2) do
         actions = [
              %{action: :deck_next, index: 0},
              %{action: :row_to_pile, index: 1, pile_index: 0, row_index: 0}
-        ] 
-        ++ Enum.map(2..1023, & %{action: :deck_next, index: &1})
+        ]
+        actions = if total_actions > 2 do
+            actions ++ Enum.map(2..(total_actions-1), & %{action: :deck_next, index: &1})
+        else actions end
         Enum.filter(actions, & &1)
     end
 
@@ -139,13 +141,14 @@ defmodule SolitaireEasy do
                 {%{s | key_pile=> pile, key_row=> row}, reward}
         end
         done = s.turn >= 1000 or won(s)
-        {s, reward, done, won(s)}
+        {s, reward, done}
     end
 
     def step(s, actions \\ nil) do
         actions = actions || actions(s.game)
         action = Enum.random(actions)
-        {game, reward, done, won} = action_proc(s.game, action)
+        {game, reward, done} = action_proc(s.game, action)
+        won = win(s.game)
         %{s | game: game, reward: s.reward + reward, done: done, won: won, step: s.step+1}
     end
 
