@@ -141,14 +141,15 @@ defmodule SolitaireEasy do
                 {%{s | key_pile=> pile, key_row=> row}, reward}
         end
         done = s.turn >= 1000 or won(s)
-        {s, reward, done}
+        game = s
+        {game, reward, done}
     end
 
     def step(s, actions \\ nil) do
         actions = actions || actions(s.game)
         action = Enum.random(actions)
         {game, reward, done} = action_proc(s.game, action)
-        won = win(s.game)
+        won = won(s.game)
         %{s | game: game, reward: s.reward + reward, done: done, won: won, step: s.step+1}
     end
 

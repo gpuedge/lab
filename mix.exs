@@ -22,7 +22,8 @@ defmodule Lab.MixProject do
   defp deps do
     [
       {:erlport, github: "heyoka/erlport", branch: "master"},
-
+      {:comsat, github: "vans163/comsat", branch: "master"},
+      {:exjsx, "~> 4.0.0"},
       {:evision, "~> 0.1.0-dev", github: "cocoa-xu/evision", branch: "main"},
       {:axon, "~> 0.1.0-dev", github: "elixir-nx/axon", branch: "main"},
       {:exla, "~> 0.1.0-dev", github: "elixir-nx/nx", sparse: "exla", override: true},

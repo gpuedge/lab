@@ -31,7 +31,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--total-timesteps", type=int, default=33000,
+    parser.add_argument("--total-timesteps", type=int, default=93000,
         help="total timesteps of the experiments")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
@@ -47,9 +47,9 @@ def parse_args():
         help="weather to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=4,
+    parser.add_argument("--num-envs", type=int, default=16,
         help="the number of parallel game environments")
-    parser.add_argument("--num-steps", type=int, default=128,
+    parser.add_argument("--num-steps", type=int, default=16, #128
         help="the number of steps to run in each environment per policy rollout")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggle learning rate annealing for policy and value networks")
@@ -104,39 +104,99 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
 
+class CategoricalMasked(Categorical):
+    def __init__(self, device=None, probs=None, logits=None, validate_args=None, masks=[]):
+        self.masks = masks
+        self.device = device
+        if len(self.masks) == 0:
+            super(CategoricalMasked, self).__init__(probs, logits, validate_args)
+        else:
+            self.masks = masks.type(torch.BoolTensor).to(device)
+            logits = torch.where(self.masks, logits, torch.tensor(-1e8).to(device))
+            super(CategoricalMasked, self).__init__(probs, logits, validate_args)
+
+    def entropy(self):
+        if len(self.masks) == 0:
+            return super(CategoricalMasked, self).entropy()
+        p_log_p = self.logits * self.probs
+        p_log_p = torch.where(self.masks, p_log_p, torch.tensor(0.0).to(self.device))
+        return -p_log_p.sum(-1)
 
 class Agent(nn.Module):
     def __init__(self, obs_shape, action_space):
         super(Agent, self).__init__()
-        self.critic = nn.Sequential(
-            layer_init(nn.Linear(np.array(obs_shape).prod(), 64)),
+        #self.critic = nn.Sequential(
+        #    layer_init(nn.Linear(np.array(obs_shape).prod(), 128)),
+        #    nn.Tanh(),
+        #    layer_init(nn.Linear(128, 128)),
+        #    nn.Tanh(),
+        #    layer_init(nn.Linear(128, 1), std=1.0),
+        #)
+        #self.actor = nn.Sequential(
+        #    layer_init(nn.Linear(np.array(obs_shape).prod(), 128)),
+        #    nn.Tanh(),
+        #    layer_init(nn.Linear(128, 128)),
+        #    nn.Tanh(),
+        #    layer_init(nn.Linear(128, action_space), std=0.01),
+        #)
+        self.network = nn.Sequential(
+            layer_init(nn.Linear(np.array(obs_shape).prod(), 1024)),
             nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
+            layer_init(nn.Linear(1024, 1024)),
             nn.Tanh(),
-            layer_init(nn.Linear(64, 1), std=1.0),
         )
-        self.actor = nn.Sequential(
-            layer_init(nn.Linear(np.array(obs_shape).prod(), 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, action_space), std=0.01),
-        )
+        self.actor = layer_init(nn.Linear(1024, action_space), std=0.01)
+        self.critic = layer_init(nn.Linear(1024, 1), std=1)
+
+        self.lstm = nn.LSTM(1024, 128)
+        for name, param in self.lstm.named_parameters():
+            if "bias" in name:
+                nn.init.constant_(param, 0)
+            elif "weight" in name:
+                nn.init.orthogonal_(param, 1.0)
+
+    def get_states(self, x, lstm_state, done):
+        hidden = self.network(x / 255.0)
+
+        # LSTM logic
+        batch_size = lstm_state[0].shape[1]
+        hidden = hidden.reshape((-1, batch_size, self.lstm.input_size))
+        done = done.reshape((-1, batch_size))
+        new_hidden = []
+        for h, d in zip(hidden, done):
+            h, lstm_state = self.lstm(
+                h.unsqueeze(0),
+                (
+                    (1.0 - d).view(1, -1, 1) * lstm_state[0],
+                    (1.0 - d).view(1, -1, 1) * lstm_state[1],
+                ),
+            )
+            new_hidden += [h]
+        new_hidden = torch.flatten(torch.cat(new_hidden), 0, 1)
+        return new_hidden, lstm_state
 
     def get_value(self, x):
-        return self.critic(x)
+        #return self.critic(x)
+        return self.critic(self.network(x))
 
-    def get_action_and_value(self, x, action=None):
-        logits = self.actor(x)
-        probs = Categorical(logits=logits)
+    def get_action_and_value(self, the_device, x, action_mask, action=None):
+        #logits = self.actor(x)
+        #probs = CategoricalMasked(device=the_device,logits=logits,masks=action_mask)
+        #if action is None:
+        #    action = probs.sample()
+        #return action, probs.log_prob(action), probs.entropy(), self.critic(x)
+        hidden = self.network(x)
+        logits = self.actor(hidden)
+        probs = CategoricalMasked(device=the_device,logits=logits,masks=action_mask)
         if action is None:
             action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(x)
+        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)
 
 
 #if __name__ == "__main__":
-def go(obs_shape, action_shape, action_space, first_obs, module_step):
+def go(obs_shape, action_shape, action_space, first_obs, next_mask, module_step):
     first_obs = np.array(first_obs)
+    next_mask = np.array(next_mask)
 
     args = parse_args()
     run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
@@ -182,14 +242,15 @@ def go(obs_shape, action_shape, action_space, first_obs, module_step):
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    action_masks = torch.zeros((args.num_steps, args.num_envs) + (action_space,)).to(device)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    #next_obs = torch.Tensor(envs.reset()).to(device)
     next_obs = torch.Tensor(first_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
+    next_mask = torch.Tensor(next_mask)
 
     for update in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
@@ -202,20 +263,22 @@ def go(obs_shape, action_shape, action_space, first_obs, module_step):
             global_step += 1 * args.num_envs
             obs[step] = next_obs
             dones[step] = next_done
+            action_masks[step] = torch.Tensor(next_mask)
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                action, logprob, _, value = agent.get_action_and_value(next_obs)
+                action, logprob, _, value = agent.get_action_and_value(device, next_obs, action_masks[step])
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
             #next_obs, reward, done, info = envs.step(action.cpu().numpy())
-            [next_obs, reward, done, info] = erlang.call(Atom(module_step), Atom(b'step'), 
+            [next_obs, next_mask, reward, done, info] = erlang.call(Atom(module_step), Atom(b'step'), 
                 [action.cpu().tolist()])
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+            next_mask = torch.Tensor(next_mask)
 
             #for item in info:
             #    if "episode" in item.keys():
@@ -259,6 +322,7 @@ def go(obs_shape, action_shape, action_space, first_obs, module_step):
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
+        b_action_masks = action_masks.reshape((-1, action_masks.shape[-1]))
 
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
@@ -269,7 +333,11 @@ def go(obs_shape, action_shape, action_space, first_obs, module_step):
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(
+                    device,
+                    b_obs[mb_inds],
+                    b_action_masks[mb_inds],
+                    b_actions.long()[mb_inds])
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
